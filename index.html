@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bear's Sweet Quest</title>
+    <style>
+        body {
+            margin: 0;
+            background: #fff0f5; /* Lavender Blush */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+        #ui {
+            position: absolute;
+            top: 15px;
+            display: flex;
+            gap: 15px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .stat-box {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 8px 15px;
+            border-radius: 15px;
+            border: 2px solid #ffb6c1;
+            color: #d81b60;
+            font-weight: bold;
+            box-shadow: 0 4px 0 #ffb6c1;
+        }
+        canvas {
+            background: #e0f2f1; /* Soft mint sky */
+            border: 6px solid #fff;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        #overlay {
+            position: absolute;
+            background: white;
+            width: 300px;
+            padding: 25px;
+            border-radius: 25px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            z-index: 20;
+        }
+        .rules-list {
+            text-align: left;
+            font-size: 14px;
+            color: #555;
+            margin: 15px 0;
+            background: #fff5f7;
+            padding: 10px;
+            border-radius: 10px;
+        }
+        button {
+            background: #ff69b4;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 18px;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #c71585;
+            font-weight: bold;
+        }
+        button:active { transform: translateY(2px); box-shadow: 0 2px 0 #c71585; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="stat-box">Score: <span id="score">0</span></div>
+        <div class="stat-box">Lives: <span id="lives">💖💖💖</span></div>
+        <div class="stat-box">Lvl: <span id="level">1</span></div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="overlay">
+        <h2 id="msgTitle" style="color: #ff69b4; margin-top:0;">Bear's Bakery 🐾</h2>
+        <div class="rules-list" id="rules">
+            <b>How to Play:</b><br>
+            • Drag the Bear to catch treats!<br>
+            • 🧁 = 1 point | 🍰 = 3 points<br>
+            • 🥦 = Lose a life (careful!)<br>
+            • Score 20 points to reach Level 2!<br>
+            • Score 50 points to reach Level 3!
+        </div>
+        <p id="msgDesc"></p>
+        <button id="startBtn">Play Now!</button>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const overlay = document.getElementById('overlay');
+    const scoreText = document.getElementById('score');
+    const levelText = document.getElementById('level');
+    const livesText = document.getElementById('lives');
+    const msgTitle = document.getElementById('msgTitle');
+    const msgDesc = document.getElementById('msgDesc');
+
+    canvas.width = Math.min(window.innerWidth - 40, 400);
+    canvas.height = 500;
+
+    let score = 0;
+    let level = 1;
+    let lives = 3;
+    let gameRunning = false;
+    let items = [];
+    let bearX = canvas.width / 2 - 30;
+    let spawnTimer;
+
+    function moveBear(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = (e.touches) ? e.touches[0].clientX : e.clientX;
+        bearX = clientX - rect.left - 30;
+        if (bearX < 0) bearX = 0;
+        if (bearX > canvas.width - 60) bearX = canvas.width - 60;
+    }
+
+    canvas.addEventListener('mousemove', moveBear);
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); moveBear(e); }, {passive: false});
+
+    function spawnItem() {
+        if (!gameRunning) return;
+        
+        let rand = Math.random();
+        let type;
+        if (rand > 0.8) type = { c: '🥦', t: 'bad' };
+        else if (rand > 0.6) type = { c: '🍰', t: 'good', p: 3 };
+        else type = { c: '🧁', t: 'good', p: 1 };
+
+        // FALL SPEED: Base is 2. We add just a little bit per level.
+        // Cap the speed at 6 so it never gets "too too rapid"
+        let speedLimit = Math.min(2 + (level * 0.7), 6);
+
+        items.push({
+            x: Math.random() * (canvas.width - 40),
+            y: -40,
+            char: type.c,
+            type: type.t,
+            pts: type.p || 0,
+            speed: speedLimit + (Math.random() * 1)
+        });
+
+        // Spawn frequency: Gets slightly faster but stays manageable
+        let spawnRate = Math.max(500, 1200 - (level * 150));
+        spawnTimer = setTimeout(spawnItem, spawnRate);
+    }
+
+    function gameOver(won = false) {
+        gameRunning = false;
+        clearTimeout(spawnTimer);
+        overlay.style.display = 'block';
+        msgTitle.innerText = won ? "You Win! 🎉" : "Oh No! 🧸";
+        msgDesc.innerText = won ? "You're a master baker!" : `The bear got full. Final Score: ${score}`;
+        startBtn.innerText = "Try Again";
+    }
+
+    function update() {
+        if (!gameRunning) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Ground
+        ctx.fillStyle = '#c5e1a5';
+        ctx.fillRect(0, canvas.height - 15, canvas.width, 15);
+
+        // Bear
+        ctx.font = '55px serif';
+        ctx.fillText('🧸', bearX, canvas.height - 25);
+
+        for (let i = items.length - 1; i >= 0; i--) {
+            let s = items[i];
+            s.y += s.speed;
+            ctx.font = '35px serif';
+            ctx.fillText(s.char, s.x, s.y);
+
+            // Collision
+            if (s.y > canvas.height - 80 && s.y < canvas.height - 25 &&
+                s.x > bearX - 20 && s.x < bearX + 50) {
+                
+                if (s.type === 'good') {
+                    score += s.pts;
+                    scoreText.innerText = score;
+                    // LEVEL LOGIC
+                    if (score >= 50 && level < 3) level = 3;
+                    else if (score >= 20 && level < 2) level = 2;
+                    levelText.innerText = level;
+                } else {
+                    lives--;
+                    livesText.innerText = "💖".repeat(lives);
+                    if (lives <= 0) gameOver(false);
+                }
+                items.splice(i, 1);
+                continue;
+            }
+
+            if (s.y > canvas.height) items.splice(i, 1);
+        }
+
+        if (score >= 100) gameOver(true); // Win at 100 points
+        requestAnimationFrame(update);
+    }
+
+    startBtn.onclick = () => {
+        score = 0; level = 1; lives = 3; items = [];
+        scoreText.innerText = '0'; levelText.innerText = '1'; livesText.innerText = '💖💖💖';
+        overlay.style.display = 'none';
+        gameRunning = true;
+        spawnItem();
+        update();
+    };
+</script>
+</body>
+</html>
